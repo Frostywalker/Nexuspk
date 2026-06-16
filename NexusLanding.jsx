@@ -11,14 +11,19 @@ import React, { useState, useEffect, useRef } from "react";
  *  - Self-contained styles (injected <style>) works without Tailwind.
  *  - Light + dark theme with a toggle in the top corner (starts light).
  *  - Sections: Hero + waitlist, Why Nexus, How It Works, Nexus Verified, FAQ, Footer.
- *  - Waitlist form logs signups to the browser console + on-screen (demo only).
+ *  - Waitlist form saves signups to a Supabase table ("waitlist").
  *
  * TO CUSTOMISE:
  *  - CONTACT_EMAIL below.
  *  - To persist signups, POST the entry inside handleSubmit to your backend.
  */
 
-const CONTACT_EMAIL = "aayansaad@gmail.com";
+const CONTACT_EMAIL = "aayankureshi@nexuspk.net";
+
+// --- Supabase (waitlist storage) ---
+// Public/publishable values (safe to include in frontend code).
+const SUPABASE_URL = "https://vztzskrveadfvsdlrgws.supabase.co";
+const SUPABASE_KEY = "sb_publishable_WAbrHvVftHon2NVzvcXuAA_opI9fAJg";
 
 // ---------------------------------------------------------------------------
 // Content
@@ -127,25 +132,60 @@ function Reveal({ children, delay = 0, as: Tag = "div", className = "" }) {
 export default function NexusEarlyAccess() {
   const [theme, setTheme] = useState("dark"); // starts dark, toggle to light
   const [form, setForm] = useState({ name: "", email: "", role: "" });
-  const [signups, setSignups] = useState([]);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [openFaq, setOpenFaq] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const validEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     if (!form.name.trim()) return setError("Please enter your name.");
     if (!validEmail(form.email)) return setError("Please enter a valid email address.");
     if (!form.role) return setError("Please tell us whether you're a freelancer or a client.");
-    const entry = { ...form, at: new Date().toISOString() };
-    console.log("[Nexus waitlist signup]", entry);
-    setSignups((s) => [entry, ...s]);
-    setDone(true);
-    setForm({ name: "", email: "", role: "" });
+
+    const entry = {
+      name: form.name.trim(),
+      email: form.email.trim().toLowerCase(),
+      role: form.role,
+    };
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/waitlist`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(entry),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        // Friendly message for duplicate email (if a unique constraint is added later)
+        if (res.status === 409 || text.includes("duplicate")) {
+          setError("This email is already on the waitlist. You're all set!");
+        } else {
+          setError("Something went wrong. Please try again in a moment.");
+        }
+        console.error("[Nexus waitlist] Supabase error:", res.status, text);
+        return;
+      }
+
+      setDone(true);
+      setForm({ name: "", email: "", role: "" });
+    } catch (err) {
+      console.error("[Nexus waitlist] Network error:", err);
+      setError("Could not connect. Please check your internet and try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const nav = [
@@ -246,24 +286,15 @@ export default function NexusEarlyAccess() {
                       </div>
                     </div>
                     {error && <div className="nx-error">{error}</div>}
-                    <button type="submit" className="nx-btn nx-btn-full">Join the waitlist</button>
+                    <button type="submit" className="nx-btn nx-btn-full" disabled={submitting}>
+                      {submitting ? "Joining…" : "Join the waitlist"}
+                    </button>
                     <p className="nx-form-note">No spam. We&apos;ll only email you about your early access.</p>
                   </form>
                 </>
               )}
             </div>
 
-            {signups.length > 0 && (
-              <div className="nx-signups">
-                <div className="nx-signups-head">Demo signups this session ({signups.length})</div>
-                <ul>
-                  {signups.map((s, i) => (
-                    <li key={i}><span className="nx-su-name">{s.name}</span><span className="nx-su-email">{s.email}</span><span className="nx-su-role">{s.role}</span></li>
-                  ))}
-                </ul>
-                <p className="nx-signups-note">Demo only. Stored in the browser and logged to the console. Connect a backend to save them for real.</p>
-              </div>
-            )}
           </div>
         </div>
       </section>
