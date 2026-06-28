@@ -258,8 +258,6 @@ export default function NexusPremiumHome() {
 }
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
-
 .nx{
   --bg:#080509;--ink:#F6F2FC;--body:#B4AEC6;--muted:#857F99;
   --violet:#7C3AED;--violet-2:#A472FF;--purple:#2E1065;
